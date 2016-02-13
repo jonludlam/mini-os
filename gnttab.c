@@ -189,4 +189,6 @@ fini_gnttab(void)
     setup.nr_frames = 0;
 
     HYPERVISOR_grant_table_op(GNTTABOP_setup_table, &setup, 1);
+
+    arch_fini_gnttab(gnttab_table, NR_GRANT_FRAMES);
 }

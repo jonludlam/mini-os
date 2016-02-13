@@ -969,3 +969,8 @@ grant_entry_t *arch_init_gnttab(int nr_grant_frames)
     HYPERVISOR_grant_table_op(GNTTABOP_setup_table, &setup, 1);
     return map_frames(frames, nr_grant_frames);
 }
+
+void arch_fini_gnttab(grant_entry_t *gnttab_table, int nr_grant_frames)
+{
+    unmap_frames(gnttab_table, nr_grant_frames);
+}
