@@ -77,6 +77,13 @@ shared_info_t *map_shared_info(unsigned long pa)
 	return (shared_info_t *)shared_info;
 }
 
+static
+void unmap_shared_info(void)
+{
+  HYPERVISOR_update_va_mapping((uintptr_t)HYPERVISOR_shared_info,
+			       __pte((virt_to_mfn(shared_info)<<L1_PAGETABLE_SHIFT) | L1_PROT), UVMF_INVLPG);
+}
+
 static inline void fpu_init(void) {
 	asm volatile("fninit");
 }
@@ -90,6 +97,34 @@ static inline void sse_init(void) {
 #define sse_init()
 #endif
 
+void
+arch_basic_init(void)
+{
+  trap_init();
+
+  /*Initialize floating point unit */
+  fpu_init();
+
+  /* Initialize SSE */
+  sse_init();
+
+  /* Grab the shared_info pointer and put it in a safe place. */
+  HYPERVISOR_shared_info = map_shared_info(start_info.shared_info);
+
+  /* set up minimal memory infos */
+  phys_to_machine_mapping = (unsigned long *)start_info.mfn_list;
+
+  /* Set up event and failsafe callback addresses. */
+#ifdef __i386__
+	HYPERVISOR_set_callbacks(
+		__KERNEL_CS, (unsigned long)hypervisor_callback,
+		__KERNEL_CS, (unsigned long)failsafe_callback);
+#else
+	HYPERVISOR_set_callbacks(
+		(unsigned long)hypervisor_callback,
+		(unsigned long)failsafe_callback, 0);
+#endif
+}
 
 /*
  * INITIAL C ENTRY POINT.
@@ -101,18 +136,12 @@ arch_init(start_info_t *si)
 
 	(void)HYPERVISOR_console_io(CONSOLEIO_write, strlen(hello), hello);
 
-	trap_init();
-
-	/*Initialize floating point unit */
-	fpu_init();
-
-	/* Initialize SSE */
-	sse_init();
-
 	/* Copy the start_info struct to a globally-accessible area. */
 	/* WARN: don't do printk before here, it uses information from
 	   shared_info. Use xprintk instead. */
 	memcpy(&start_info, si, sizeof(*si));
+
+	arch_basic_init();
 
 	/* print out some useful information  */
 	minios_show_banner();
@@ -130,25 +159,29 @@ arch_init(start_info_t *si)
 			si->cmd_line ? (const char *)si->cmd_line : "NULL");
 	printk("       stack: %p-%p\n", stack, stack + sizeof(stack));
 #endif
-
-	/* set up minimal memory infos */
-	phys_to_machine_mapping = (unsigned long *)start_info.mfn_list;
-
-	/* Grab the shared_info pointer and put it in a safe place. */
-	HYPERVISOR_shared_info = map_shared_info(start_info.shared_info);
-
-	    /* Set up event and failsafe callback addresses. */
-#ifdef __i386__
-	HYPERVISOR_set_callbacks(
-		__KERNEL_CS, (unsigned long)hypervisor_callback,
-		__KERNEL_CS, (unsigned long)failsafe_callback);
-#else
-	HYPERVISOR_set_callbacks(
-		(unsigned long)hypervisor_callback,
-		(unsigned long)failsafe_callback, 0);
-#endif
-
 	start_kernel();
+}
+
+void arch_pre_suspend(void)
+{
+  /* 'Canonicalize' the store and console mfns - the suspend/resume
+     process will rewrite these to be the new addresses when we
+     resume */
+  start_info.store_mfn = mfn_to_pfn(start_info.store_mfn);
+  start_info.console.domU.mfn = mfn_to_pfn(start_info.console.domU.mfn);
+
+  unmap_shared_info();
+}
+
+void
+arch_post_suspend(int cancelled)
+{
+  if(cancelled) {
+    start_info.store_mfn = pfn_to_mfn(start_info.store_mfn);
+    start_info.console.domU.mfn = pfn_to_mfn(start_info.console.domU.mfn);
+  }
+
+  arch_basic_init();
 }
 
 void
