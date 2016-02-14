@@ -63,6 +63,8 @@ static unsigned long *alloc_bitmap;
 unsigned long minios_heap_pages_used = 0;
 unsigned long minios_heap_pages_total = 0;
 
+static unsigned long minios_max_pfn = 0;
+
 /*
  * Hint regarding bitwise arithmetic in map_{alloc,free}:
  *  -(1<<n)  sets all bits >= n. 
@@ -412,33 +414,38 @@ void *sbrk(ptrdiff_t increment)
 void init_mm(void)
 {
 
-    unsigned long start_pfn, max_pfn;
+    unsigned long start_pfn;
 
 #ifdef CONFIG_VERBOSE_BOOT
     printk("MM: Init\n");
 #endif
 
-    arch_init_mm(&start_pfn, &max_pfn);
+    arch_init_mm(&start_pfn, &minios_max_pfn);
     /*
      * now we can initialise the page allocator
      */
 #ifdef CONFIG_VERBOSE_BOOT
     printk("MM: Initialise page allocator for %lx(%lx)-%lx(%lx)\n",
            (u_long)to_virt(PFN_PHYS(start_pfn)), (u_long)PFN_PHYS(start_pfn),
-           (u_long)to_virt(PFN_PHYS(max_pfn)), (u_long)PFN_PHYS(max_pfn));
+           (u_long)to_virt(PFN_PHYS(minios_max_pfn)), (u_long)PFN_PHYS(minios_max_pfn));
 #endif
-    init_page_allocator(PFN_PHYS(start_pfn), PFN_PHYS(max_pfn));
+    init_page_allocator(PFN_PHYS(start_pfn), PFN_PHYS(minios_max_pfn));
 #ifdef CONFIG_VERBOSE_BOOT
     printk("MM: done\n");
 #endif
 
-    arch_init_p2m(max_pfn);
+    arch_init_p2m(minios_max_pfn);
     
-    arch_init_demand_mapping_area(max_pfn);
+    arch_init_demand_mapping_area(minios_max_pfn);
 }
 
 void fini_mm(void)
 {
+}
+
+void resume_mm(void)
+{
+  arch_rebuild_p2m(minios_max_pfn);
 }
 
 void sanity_check(void)
