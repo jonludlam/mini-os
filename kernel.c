@@ -65,13 +65,58 @@ void setup_xen_features(void)
     }
 }
 
+
+int suspend_kernel(void)
+{
+  int cancelled = 0;
+
+  /* Grants can't possibly survive a suspend/resume */
+  fini_gnttab();
+
+  /* Unmap foreign pages like the shared_info page */
+  arch_pre_suspend();
+
+  cancelled = HYPERVISOR_suspend(virt_to_mfn(start_info));  
+
+  /* very basic reinitialisation, including restoring console */
+  arch_post_suspend(cancelled);
+  
+  /* Set up events. */
+  init_events();
+  
+  /* ENABLE EVENT DELIVERY. This is disabled at start of day. */
+  local_irq_enable();
+
+  /* Have these changed? */
+  setup_xen_features();
+
+  /* Re-sets up the p2m map */
+  resume_mm();
+
+  /* Init grant tables */
+  init_gnttab();
+
+  return cancelled;
+}
+
 #ifdef CONFIG_XENBUS
 /* This should be overridden by the application we are linked against. */
 __attribute__((weak)) void app_shutdown(unsigned reason)
 {
     struct sched_shutdown sched_shutdown = { .reason = reason };
-    printk("Shutdown requested: %d\n", reason);
-    HYPERVISOR_sched_op(SCHEDOP_shutdown, &sched_shutdown);
+
+    switch(reason) {
+    case SHUTDOWN_poweroff:
+    case SHUTDOWN_reboot:
+    case SHUTDOWN_crash:
+      HYPERVISOR_sched_op(SCHEDOP_shutdown, &sched_shutdown);
+      break; /* Somewhat unnecessary */
+    case SHUTDOWN_suspend:
+      suspend_kernel();
+      break;
+    default:
+      printk("Unhandled shutdown reason");
+    }
 }
 
 static void shutdown_thread(void *p)
@@ -99,9 +144,13 @@ static void shutdown_thread(void *p)
         shutdown_reason = SHUTDOWN_poweroff;
     else if (!strcmp(shutdown, "reboot"))
         shutdown_reason = SHUTDOWN_reboot;
-    else
+    else if (!strcmp(shutdown, "suspend"))
+        shutdown_reason = SHUTDOWN_suspend;
+    else {
+       printk("Unknown");
         /* Unknown */
         shutdown_reason = SHUTDOWN_crash;
+    }
     app_shutdown(shutdown_reason);
     free(shutdown);
 }

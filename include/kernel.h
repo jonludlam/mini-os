@@ -1,6 +1,7 @@
 #ifndef _KERNEL_H_
 #define _KERNEL_H_
 
+int suspend_kernel(void);
 void start_kernel(void);
 void do_exit(void) __attribute__((noreturn));
 void arch_do_exit(void);
