@@ -76,7 +76,7 @@ int suspend_kernel(void)
   /* Unmap foreign pages like the shared_info page */
   arch_pre_suspend();
 
-  cancelled = HYPERVISOR_suspend(virt_to_mfn(start_info));  
+  cancelled = HYPERVISOR_suspend(virt_to_mfn(&start_info));
 
   /* very basic reinitialisation, including restoring console */
   arch_post_suspend(cancelled);

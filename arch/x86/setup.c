@@ -42,7 +42,8 @@ shared_info_t *HYPERVISOR_shared_info;
  * This structure contains start-of-day info, such as pagetable base pointer,
  * address of the shared_info structure, and things like that.
  */
-union start_info_union start_info_union;
+union start_info_union start_info_union
+    __attribute__ ((aligned (PAGE_SIZE)));
 
 /*
  * Just allocate the kernel stack here. SS:ESP is set up to point here
