@@ -80,12 +80,15 @@ int suspend_kernel(void)
 
   /* very basic reinitialisation, including restoring console */
   arch_post_suspend(cancelled);
-  
+
+  /* Reinitialize events */
+  init_events();
+
   /* Set up events. */
   init_events();
-  
-  /* ENABLE EVENT DELIVERY. This is disabled at start of day. */
-  local_irq_enable();
+
+  /* Reinitialize time */
+  init_time();
 
   /* Have these changed? */
   setup_xen_features();
@@ -96,6 +99,7 @@ int suspend_kernel(void)
   /* Init grant tables */
   init_gnttab();
 
+  printk("Up an' at 'em!\n");
   return cancelled;
 }
 
